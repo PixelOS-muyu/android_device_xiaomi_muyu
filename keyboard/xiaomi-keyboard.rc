@@ -8,12 +8,6 @@ on property:sys.boot_completed=1
     start vendor.midevauth
     start vendor.xiaomi-keyboard
 
-# toucheventcheck is MiSight touch telemetry, it busy-loops a CPU core
-# forever once the keyboard input node goes away. It is a oneshot service,
-# so stopping it once keeps it stopped.
-on property:init.svc.toucheventcheck=running
-    stop toucheventcheck
-
 service vendor.xiaomi-keyboard /vendor/bin/xiaomi-keyboard
     class hal
     user system
