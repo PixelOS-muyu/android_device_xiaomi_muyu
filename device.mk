@@ -19,6 +19,11 @@ PRODUCT_PACKAGES += \
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.fingerprint.xml:$(TARGET_COPY_OUT_VENDOR)/etc/permissions/android.hardware.fingerprint.xml
 
+# Keyboard
+PRODUCT_PACKAGES += \
+    Vendor_15d9_Product_00a3.idc \
+    xiaomi-keyboard
+
 # Overlays
 PRODUCT_PACKAGES += \
     FrameworksResMuyu \

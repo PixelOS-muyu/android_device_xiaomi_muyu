@@ -1,3 +1,6 @@
 # Fingerprint
 com.fingerprints.fpc.extension.IFpcExtension/default    u:object_r:vendor_hal_fingerprint_service_xiaomi:s0
 vendor.xiaomi.hardware.fx.tunnel.IMiFxTunnel/default    u:object_r:vendor_hal_fingerprint_service_xiaomi:s0
+
+# Keyboard
+vendor.xiaomi.hardware.aidl.midevauth.IMidevauthService/default    u:object_r:hal_midevauth_service:s0

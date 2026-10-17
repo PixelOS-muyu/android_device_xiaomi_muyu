@@ -1,0 +1,9 @@
+hal_attribute_service(hal_midevauth, hal_midevauth_service)
+
+binder_call(hal_midevauth_client, hal_midevauth_server)
+binder_call(hal_midevauth_server, hal_midevauth_client)
+
+# chown / chmod in xiaomi-keyboard.rc
+allow vendor_init nano_device:chr_file setattr;
+allow vendor_init sysfs_nanodev:file setattr;
+allow vendor_init sysfs_xiaomi_kbd_hid:file setattr;

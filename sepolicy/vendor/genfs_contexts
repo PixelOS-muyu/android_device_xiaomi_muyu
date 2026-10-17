@@ -1,2 +1,6 @@
 # Wakeup
 genfscon sysfs "/devices/platform/soc/soc:fingerprint_fpc/wakeup"    u:object_r:sysfs_wakeup:s0
+
+# Keyboard
+genfscon sysfs /devices/virtual/nanodev             u:object_r:sysfs_nanodev:s0
+genfscon sysfs /bus/hid                             u:object_r:sysfs_xiaomi_kbd_hid:s0

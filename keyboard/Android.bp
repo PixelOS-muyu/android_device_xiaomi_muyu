@@ -1,0 +1,51 @@
+//
+// Copyright (C) 2026 The PixelOS Project
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+genrule_defaults {
+    name: "xiaomi-midevauth-ndk-gen-defaults",
+    tools: ["aidl"],
+    srcs: ["aidl/vendor/xiaomi/hardware/aidl/midevauth/IMidevauthService.aidl"],
+    cmd: "$(location aidl) --lang=ndk --structured --stability=vintf " +
+        "-I $$(realpath -s --relative-to=. $$(dirname $(in))/../../../../..) " +
+        "-o $(genDir)/src -h $(genDir)/include $(in)",
+}
+
+genrule {
+    name: "xiaomi-midevauth-ndk-gen-src",
+    defaults: ["xiaomi-midevauth-ndk-gen-defaults"],
+    out: ["src/vendor/xiaomi/hardware/aidl/midevauth/IMidevauthService.cpp"],
+}
+
+genrule {
+    name: "xiaomi-midevauth-ndk-gen-headers",
+    defaults: ["xiaomi-midevauth-ndk-gen-defaults"],
+    out: [
+        "include/aidl/vendor/xiaomi/hardware/aidl/midevauth/IMidevauthService.h",
+        "include/aidl/vendor/xiaomi/hardware/aidl/midevauth/BnMidevauthService.h",
+        "include/aidl/vendor/xiaomi/hardware/aidl/midevauth/BpMidevauthService.h",
+    ],
+    export_include_dirs: ["include"],
+}
+
+cc_binary {
+    name: "xiaomi-keyboard",
+    vendor: true,
+    srcs: ["xiaomi-keyboard.cpp"],
+    generated_sources: ["xiaomi-midevauth-ndk-gen-src"],
+    generated_headers: ["xiaomi-midevauth-ndk-gen-headers"],
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "liblog",
+    ],
+    init_rc: ["xiaomi-keyboard.rc"],
+}
+
+prebuilt_usr_idc {
+    name: "Vendor_15d9_Product_00a3.idc",
+    src: "Vendor_15d9_Product_00a3.idc",
+    vendor: true,
+}

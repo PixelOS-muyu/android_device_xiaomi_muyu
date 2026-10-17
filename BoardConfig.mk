@@ -14,6 +14,10 @@ TARGET_BOOTLOADER_BOARD_NAME := muyu
 BOARD_PREBUILT_DTBIMAGE_DIR := $(KERNEL_PATH)/dtbs/
 BOARD_PREBUILT_DTBOIMAGE := $(KERNEL_PATH)/dtbo.img
 
+# Keyboard
+DEVICE_FRAMEWORK_COMPATIBILITY_MATRIX_FILE += \
+    device/xiaomi/muyu/keyboard/framework_compatibility_matrix.xml
+
 # Kernel
 TARGET_NO_KERNEL_OVERRIDE := true
 LOCAL_KERNEL := $(KERNEL_PATH)/kernel

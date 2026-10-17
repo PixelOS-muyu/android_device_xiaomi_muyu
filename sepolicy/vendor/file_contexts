@@ -1,2 +1,7 @@
 # Fingerprint
 /vendor/bin/hw/android\.hardware\.biometrics\.fingerprint-service\.xiaomi    u:object_r:hal_fingerprint_default_exec:s0
+
+# Keyboard
+/dev/nanodev0                                       u:object_r:nano_device:s0
+/(odm|vendor/odm)/bin/midevauthd                    u:object_r:hal_midevauth_default_exec:s0
+/vendor/bin/xiaomi-keyboard                         u:object_r:xiaomi_keyboard_exec:s0

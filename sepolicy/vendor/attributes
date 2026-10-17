@@ -1,0 +1,9 @@
+hal_attribute(midevauth)
+
+type hal_midevauth_service, hal_service_type, service_manager_type;
+
+type nano_device, dev_type;
+type sysfs_nanodev, sysfs_type, fs_type;
+type sysfs_xiaomi_kbd_hid, sysfs_type, fs_type;
+
+vendor_internal_prop(vendor_payment_security_prop)

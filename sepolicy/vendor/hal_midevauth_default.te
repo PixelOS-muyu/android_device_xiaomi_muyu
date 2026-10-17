@@ -1,0 +1,17 @@
+type hal_midevauth_default, domain;
+hal_server_domain(hal_midevauth_default, hal_midevauth)
+
+type hal_midevauth_default_exec, exec_type, vendor_file_type, file_type;
+init_daemon_domain(hal_midevauth_default)
+
+binder_use(hal_midevauth_default)
+
+# TrustZone devauth trustlet
+allow hal_midevauth_default tee_device:chr_file rw_file_perms;
+allow hal_midevauth_default {
+    vendor_dmabuf_qseecom_heap_device
+    vendor_dmabuf_qseecom_ta_heap_device
+}:chr_file r_file_perms;
+r_dir_file(hal_midevauth_default, firmware_file)
+
+set_prop(hal_midevauth_default, vendor_payment_security_prop)

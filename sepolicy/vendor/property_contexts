@@ -1,2 +1,5 @@
 # Fingerprint
 persist.vendor.sys.fp.    u:object_r:vendor_fp_info_prop:s0
+
+# Keyboard
+persist.vendor.sys.devauth                          u:object_r:vendor_payment_security_prop:s0
