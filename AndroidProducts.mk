@@ -5,4 +5,4 @@
 #
 
 PRODUCT_MAKEFILES := \
-    $(LOCAL_DIR)/lineage_muyu.mk
+    $(LOCAL_DIR)/custom_muyu.mk
