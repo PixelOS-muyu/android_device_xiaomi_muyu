@@ -12,8 +12,8 @@
  *  - binds the keyboard HID only while the keyboard is attached so the
  *    on-screen keyboard comes back when it is detached
  *  - drives the Caps Lock LED and the keyboard backlight: adaptive level from
- *    XiaomiParts (ambient light), off after 30 s without typing,
- *    Ctrl+Alt+4 brighter / Ctrl+Alt+3 dimmer
+ *    XiaomiParts (ambient light) with the HyperOS 2 s fade, idle handling by
+ *    the keyboard MCU, Ctrl+Alt+4 brighter / Ctrl+Alt+3 dimmer
  */
 
 #define LOG_TAG "xiaomi-keyboard"
@@ -35,6 +35,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -116,6 +117,8 @@ bool SendFeature(uint8_t cmd, uint8_t value) {
 /* ---------------------------------------------------------------------- */
 /* MiAuth handshake                                                        */
 /* ---------------------------------------------------------------------- */
+
+void OnKeyboardSleepStatus(bool asleep);
 
 class Authenticator {
   public:
@@ -244,6 +247,9 @@ size_t Authenticator::Parse(const std::vector<uint8_t>& b) {
             case 0x22:
                 LOG(DEBUG) << "KB_STATUS val=" << int(val);
                 break;
+            case 0x28:  // sleep status, as parsed by HyperOS IICProtocolDispatcher
+                if (len == 1) OnKeyboardSleepStatus(val == 0);
+                break;
         }
         i += n;
     }
@@ -363,9 +369,12 @@ std::string FindCapsEventNode() {
     return "";
 }
 
-// Keyboard backlight: the level comes from XiaomiParts (ambient light, through
-// kBacklightProp) or from Ctrl+Alt+3/4. The light is switched off after
-// kIdleTimeout without key presses and comes back with the next key press.
+// Keyboard backlight, modelled on HyperOS (miui-services BackLightFeature):
+//  - the level comes from XiaomiParts (ambient light, kBacklightProp) or Ctrl+Alt+3/4
+//  - level changes fade over 2 s with an accelerate/decelerate curve
+//  - idle handling is done by the keyboard MCU itself: it reports sleep/wake
+//    (cmd 0x28) and keeps its backlight off while asleep. While it sleeps the
+//    target is only stored, on wake it is resent if it changed meanwhile.
 class Backlight {
   public:
     static Backlight& get() {
@@ -373,64 +382,91 @@ class Backlight {
         return instance;
     }
 
-    void onKeyPress() {
-        std::lock_guard<std::mutex> lock(mLock);
-        mLastKey = std::chrono::steady_clock::now();
-        applyLocked();
-    }
-
     void onManualStep(int delta) {
         std::lock_guard<std::mutex> lock(mLock);
-        mLevel = std::clamp(mLevel + delta, 0, kBacklightMax);
-        mLastKey = std::chrono::steady_clock::now();
-        LOG(INFO) << "backlight manual " << mLevel;
-        applyLocked();
+        mTarget = std::clamp(mTarget + delta, 0, kBacklightMax);
+        LOG(INFO) << "backlight manual " << mTarget;
+        mAnimating = false;
+        if (!mAsleep) sendLocked(mTarget);
     }
 
     // The keyboard does not keep its backlight across a reattach.
     void onKeyboardPresent() {
         std::lock_guard<std::mutex> lock(mLock);
         mSent = -1;
-        mLastKey = std::chrono::steady_clock::now();
-        applyLocked();
+        mAsleep = false;
+        mAnimating = false;
+        sendLocked(mTarget);
     }
 
-    // Called once a second: follows the ambient level and handles the idle timeout.
+    void onSleepStatus(bool asleep) {
+        std::lock_guard<std::mutex> lock(mLock);
+        if (asleep == mAsleep) return;
+        mAsleep = asleep;
+        LOG(INFO) << "keyboard " << (asleep ? "asleep" : "awake");
+        if (!asleep && mSent != mTarget) {
+            mAnimating = false;
+            sendLocked(mTarget);
+        }
+    }
+
+    // Called every kTick: follows the ambient level and drives the fade.
     void tick() {
         std::lock_guard<std::mutex> lock(mLock);
         const int prop = android::base::GetIntProperty(kBacklightProp, -1, -1, kBacklightMax);
         if (prop != mLastProp) {
             mLastProp = prop;
-            if (prop >= 0) {
-                mLevel = prop;  // a new ambient level replaces a manual adjustment
-                LOG(INFO) << "backlight auto " << mLevel;
+            if (prop >= 0 && prop != mTarget) {
+                LOG(INFO) << "backlight auto " << prop;
+                mTarget = prop;  // a new ambient level replaces a manual adjustment
+                if (mAsleep) {
+                    mAnimating = false;
+                } else {
+                    mFrom = mSent < 0 ? 0 : mSent;
+                    mStart = std::chrono::steady_clock::now();
+                    mAnimating = true;
+                }
             }
         }
-        applyLocked();
+        if (!mAnimating) return;
+        const float t = std::chrono::duration<float>(std::chrono::steady_clock::now() - mStart) /
+                        kFadeDuration;
+        const float f = std::min(t, 1.0f);
+        // android.view.animation.AccelerateDecelerateInterpolator
+        const float eased = std::cos((f + 1.0f) * static_cast<float>(M_PI)) / 2.0f + 0.5f;
+        sendLocked(static_cast<int>(std::lround(mFrom + (mTarget - mFrom) * eased)));
+        if (f >= 1.0f) mAnimating = false;
     }
+
+    static constexpr auto kTick = std::chrono::milliseconds(20);
 
   private:
     static constexpr char kBacklightProp[] = "sys.xiaomi.kbd_backlight";
-    static constexpr auto kIdleTimeout = std::chrono::seconds(30);
+    static constexpr std::chrono::duration<float> kFadeDuration = std::chrono::seconds(2);
 
-    void applyLocked() {
-        const bool idle = std::chrono::steady_clock::now() - mLastKey > kIdleTimeout;
-        const int target = idle ? 0 : mLevel;
-        if (target == mSent) return;
-        if (SendFeature(kBacklightCmd, static_cast<uint8_t>(target))) mSent = target;
+    void sendLocked(int value) {
+        if (value == mSent) return;
+        if (SendFeature(kBacklightCmd, static_cast<uint8_t>(value))) mSent = value;
     }
 
     std::mutex mLock;
-    int mLevel = 0;
+    int mTarget = 0;
     int mSent = -1;
     int mLastProp = -2;
-    std::chrono::steady_clock::time_point mLastKey = std::chrono::steady_clock::now();
+    int mFrom = 0;
+    bool mAsleep = false;
+    bool mAnimating = false;
+    std::chrono::steady_clock::time_point mStart;
 };
+
+void OnKeyboardSleepStatus(bool asleep) {
+    Backlight::get().onSleepStatus(asleep);
+}
 
 void BacklightLoop() {
     for (;;) {
         Backlight::get().tick();
-        std::this_thread::sleep_for(1s);
+        std::this_thread::sleep_for(Backlight::kTick);
     }
 }
 
@@ -468,7 +504,6 @@ void LedLoop() {
                 const input_event& e = ev[k];
                 if (e.type == EV_KEY) {
                     const bool down = e.value == 1;
-                    if (down) Backlight::get().onKeyPress();
                     switch (e.code) {
                         case KEY_LEFTCTRL:
                         case KEY_RIGHTCTRL:
