@@ -1,0 +1,2 @@
+# XiaomiParts sets the adaptive keyboard backlight level
+set_prop(system_app, xiaomi_kbd_backlight_prop)

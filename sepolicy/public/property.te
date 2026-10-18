@@ -1,0 +1,2 @@
+# Adaptive keyboard backlight level (XiaomiParts -> xiaomi-keyboard)
+system_public_prop(xiaomi_kbd_backlight_prop)

@@ -1,0 +1,2 @@
+# Adaptive keyboard backlight level (XiaomiParts -> xiaomi-keyboard)
+sys.xiaomi.kbd_backlight    u:object_r:xiaomi_kbd_backlight_prop:s0 exact int

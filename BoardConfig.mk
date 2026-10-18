@@ -44,6 +44,8 @@ TARGET_VENDOR_PROP += $(DEVICE_PATH)/configs/properties/vendor.prop
 
 # SEPolicy
 BOARD_VENDOR_SEPOLICY_DIRS += $(DEVICE_PATH)/sepolicy/vendor
+SYSTEM_EXT_PUBLIC_SEPOLICY_DIRS += device/xiaomi/muyu/sepolicy/public
+SYSTEM_EXT_PRIVATE_SEPOLICY_DIRS += device/xiaomi/muyu/sepolicy/private
 
 # Workaround to make lineage's soong generator work
 TARGET_KERNEL_SOURCE := $(KERNEL_PATH)/kernel-headers

@@ -23,3 +23,6 @@ allow xiaomi_keyboard input_device:chr_file r_file_perms;
 
 allow xiaomi_keyboard sysfs:dir r_dir_perms;
 allow xiaomi_keyboard sysfs:lnk_file read;
+
+# Adaptive backlight level from XiaomiParts
+get_prop(xiaomi_keyboard, xiaomi_kbd_backlight_prop)

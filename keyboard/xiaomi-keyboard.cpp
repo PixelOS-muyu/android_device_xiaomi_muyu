@@ -11,8 +11,9 @@
  *    MiDevAuth TrustZone HAL (midevauthd)
  *  - binds the keyboard HID only while the keyboard is attached so the
  *    on-screen keyboard comes back when it is detached
- *  - drives the Caps Lock LED and the keyboard backlight
- *    (Ctrl+Alt+4 brighter / Ctrl+Alt+3 dimmer)
+ *  - drives the Caps Lock LED and the keyboard backlight: adaptive level from
+ *    XiaomiParts (ambient light), off after 30 s without typing,
+ *    Ctrl+Alt+4 brighter / Ctrl+Alt+3 dimmer
  */
 
 #define LOG_TAG "xiaomi-keyboard"
@@ -20,6 +21,7 @@
 #include <aidl/vendor/xiaomi/hardware/aidl/midevauth/IMidevauthService.h>
 #include <android-base/file.h>
 #include <android-base/logging.h>
+#include <android-base/properties.h>
 #include <android-base/strings.h>
 #include <android/binder_manager.h>
 
@@ -361,8 +363,78 @@ std::string FindCapsEventNode() {
     return "";
 }
 
+// Keyboard backlight: the level comes from XiaomiParts (ambient light, through
+// kBacklightProp) or from Ctrl+Alt+3/4. The light is switched off after
+// kIdleTimeout without key presses and comes back with the next key press.
+class Backlight {
+  public:
+    static Backlight& get() {
+        static Backlight instance;
+        return instance;
+    }
+
+    void onKeyPress() {
+        std::lock_guard<std::mutex> lock(mLock);
+        mLastKey = std::chrono::steady_clock::now();
+        applyLocked();
+    }
+
+    void onManualStep(int delta) {
+        std::lock_guard<std::mutex> lock(mLock);
+        mLevel = std::clamp(mLevel + delta, 0, kBacklightMax);
+        mLastKey = std::chrono::steady_clock::now();
+        LOG(INFO) << "backlight manual " << mLevel;
+        applyLocked();
+    }
+
+    // The keyboard does not keep its backlight across a reattach.
+    void onKeyboardPresent() {
+        std::lock_guard<std::mutex> lock(mLock);
+        mSent = -1;
+        mLastKey = std::chrono::steady_clock::now();
+        applyLocked();
+    }
+
+    // Called once a second: follows the ambient level and handles the idle timeout.
+    void tick() {
+        std::lock_guard<std::mutex> lock(mLock);
+        const int prop = android::base::GetIntProperty(kBacklightProp, -1, -1, kBacklightMax);
+        if (prop != mLastProp) {
+            mLastProp = prop;
+            if (prop >= 0) {
+                mLevel = prop;  // a new ambient level replaces a manual adjustment
+                LOG(INFO) << "backlight auto " << mLevel;
+            }
+        }
+        applyLocked();
+    }
+
+  private:
+    static constexpr char kBacklightProp[] = "sys.xiaomi.kbd_backlight";
+    static constexpr auto kIdleTimeout = std::chrono::seconds(30);
+
+    void applyLocked() {
+        const bool idle = std::chrono::steady_clock::now() - mLastKey > kIdleTimeout;
+        const int target = idle ? 0 : mLevel;
+        if (target == mSent) return;
+        if (SendFeature(kBacklightCmd, static_cast<uint8_t>(target))) mSent = target;
+    }
+
+    std::mutex mLock;
+    int mLevel = 0;
+    int mSent = -1;
+    int mLastProp = -2;
+    std::chrono::steady_clock::time_point mLastKey = std::chrono::steady_clock::now();
+};
+
+void BacklightLoop() {
+    for (;;) {
+        Backlight::get().tick();
+        std::this_thread::sleep_for(1s);
+    }
+}
+
 void LedLoop() {
-    int backlight = 0;
     for (;;) {
         const std::string node = FindCapsEventNode();
         if (node.empty()) {
@@ -375,6 +447,7 @@ void LedLoop() {
             continue;
         }
         LOG(INFO) << "keyboard present: " << node;
+        Backlight::get().onKeyboardPresent();
 
         bool caps = false, ctrl = false, alt = false;
         for (;;) {
@@ -395,6 +468,7 @@ void LedLoop() {
                 const input_event& e = ev[k];
                 if (e.type == EV_KEY) {
                     const bool down = e.value == 1;
+                    if (down) Backlight::get().onKeyPress();
                     switch (e.code) {
                         case KEY_LEFTCTRL:
                         case KEY_RIGHTCTRL:
@@ -413,10 +487,8 @@ void LedLoop() {
                         case KEY_3:
                         case KEY_4:
                             if (down && ctrl && alt) {
-                                backlight += e.code == KEY_4 ? kBacklightStep : -kBacklightStep;
-                                backlight = std::clamp(backlight, 0, kBacklightMax);
-                                SendFeature(kBacklightCmd, static_cast<uint8_t>(backlight));
-                                LOG(INFO) << "backlight=" << backlight;
+                                Backlight::get().onManualStep(
+                                        e.code == KEY_4 ? kBacklightStep : -kBacklightStep);
                             }
                             break;
                     }
@@ -440,6 +512,7 @@ int main() {
 
     std::thread hid(HidLoop);
     std::thread leds(LedLoop);
+    std::thread backlight(BacklightLoop);
     Authenticator().Run();
     return 0;
 }
