@@ -6,4 +6,7 @@
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
     <!-- Default for Settings.Global.DEVICE_NAME $1=MODEL-->
     <string name="def_device_name_simple">Xiaomi Pad 7 Pro</string>
+
+    <!-- Auto-rotate on by default: tablet, and the setup gesture tutorial asks to rotate -->
+    <bool name="def_accelerometer_rotation">true</bool>
 </resources>
